@@ -1,0 +1,51 @@
+#!/bin/bash
+
+set -e -o pipefail
+
+#make clean
+
+if [ -z "$AVR_FREQ" ]
+then
+  AVR_FREQ=8000000L
+fi
+
+if [ -z "$BAUD_RATE" ]
+then
+  BAUD_RATE=57600
+fi
+
+if [ -z "$USINGMAKEFILES" ]
+then 
+  USINGMAKEFILES="Makefile.atmega8 Makefile.atmega640-1280-1281-2560-2561 Makefile.atmegaxx4-16-32"
+fi
+
+export AVR_FREQ
+export BAUD_RATE
+
+if grep -V | grep --silent GNU
+then
+  GREP_TARGET_CMD="grep -oP '^([A-Za-z0-9_]+)(?:\:)'"
+  GREP_SIZE_CMD="grep -oP '[1-9][0-9]+'"
+elif grep -V | grep --silent BSD
+then
+  # thanks to https://stackoverflow.com/a/16658690
+  GREP_TARGET_CMD="perl -nle 'print $& if m{^([A-Za-z0-9_]+)(?:\:)}'"
+  GREP_SIZE_CMD="perl -nle 'print $& if m{[1-9][0-9]+}'"
+fi
+
+for chip in $(cat $USINGMAKEFILES | eval $GREP_TARGET_CMD | grep -v isp | sort | uniq | sed s/://)
+do
+  echo -n "Building $chip with CPU $AVR_FREQ and $BAUD_RATE BAUD ... "
+  
+  if ! ( make $chip 2>&1 ) >$chip.build_log
+  then
+    echo "FAILED, SEE: $chip.build_log"
+    exit 1
+  else    
+    echo -n "OK, SIZE: "
+    avr-size optiboot_${chip}_${AVR_FREQ}_${BAUD_RATE}.hex | eval $GREP_SIZE_CMD | head -1
+  fi
+done
+
+#ls *hex
+
